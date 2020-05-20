@@ -777,6 +777,11 @@ public class BlockchainImpl implements Blockchain, org.ethereum.facade.Blockchai
         return isValid;
     }
 
+    /**
+     * 校验叔块信息是否有效
+     * @param block
+     * @return
+     */
     public boolean validateUncles(Block block) {
         String unclesHash = toHexString(block.getHeader().getUnclesHash());
         String unclesListHash = toHexString(HashUtil.sha3(block.getHeader().getUnclesEncoded(block.getUncleList())));
@@ -792,16 +797,18 @@ public class BlockchainImpl implements Blockchain, org.ethereum.facade.Blockchai
             return false;
         }
 
-
+//获取祖先区块信息
         Set<ByteArrayWrapper> ancestors = getAncestors(blockStore, block, UNCLE_GENERATION_LIMIT + 1, false);
         Set<ByteArrayWrapper> usedUncles = getUsedUncles(blockStore, block, false);
 
         for (BlockHeader uncle : block.getUncleList()) {
 
             // - They are valid headers (not necessarily valid blocks)
+            //区块信息是否合法
             if (!isValid(uncle)) return false;
 
             //if uncle's parent's number is not less than currentBlock - UNCLE_GEN_LIMIT, mark invalid
+            //判断叔块的区块编号是否已经大于7
             boolean isValid = !(getParent(uncle).getNumber() < (block.getNumber() - UNCLE_GENERATION_LIMIT));
             if (!isValid) {
                 logger.warn("Uncle too old: generationGap must be under UNCLE_GENERATION_LIMIT");
@@ -809,11 +816,12 @@ public class BlockchainImpl implements Blockchain, org.ethereum.facade.Blockchai
             }
 
             ByteArrayWrapper uncleHash = new ByteArrayWrapper(uncle.getHash());
+            //判断叔块信息不是直系七代的父区块
             if (ancestors.contains(uncleHash)) {
                 logger.warn("Uncle is direct ancestor: " + toHexString(uncle.getHash()));
                 return false;
             }
-
+//判断叔块是否已经被使用
             if (usedUncles.contains(uncleHash)) {
                 logger.warn("Uncle is not unique: " + toHexString(uncle.getHash()));
                 return false;
@@ -829,7 +837,7 @@ public class BlockchainImpl implements Blockchain, org.ethereum.facade.Blockchai
         return true;
     }
 
-
+    //循环获取直系七代的父块信息。
     public static Set<ByteArrayWrapper> getAncestors(BlockStore blockStore, Block testedBlock, int limitNum, boolean isParentBlock) {
         Set<ByteArrayWrapper> ret = new HashSet<>();
         limitNum = (int) max(0, testedBlock.getNumber() - limitNum);
@@ -837,13 +845,14 @@ public class BlockchainImpl implements Blockchain, org.ethereum.facade.Blockchai
         if (!isParentBlock) {
             it = blockStore.getBlockByHash(it.getParentHash());
         }
-        while(it != null && it.getNumber() >= limitNum) {
+        while(it != null && it.getNumber() >= limitNum) { //循环获取直系七代的父块信息
             ret.add(new ByteArrayWrapper(it.getHash()));
             it = blockStore.getBlockByHash(it.getParentHash());
         }
         return ret;
     }
 
+    //获取直系7代的区块包含的叔块信息。
     public Set<ByteArrayWrapper> getUsedUncles(BlockStore blockStore, Block testedBlock, boolean isParentBlock) {
         Set<ByteArrayWrapper> ret = new HashSet<>();
         long limitNum = max(0, testedBlock.getNumber() - UNCLE_GENERATION_LIMIT);
